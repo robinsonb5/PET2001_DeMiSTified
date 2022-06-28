@@ -45,6 +45,9 @@ module pet2001hw
 	input [15:0]     addr, // CPU Interface
 	input [7:0]      data_in,
 	output reg [7:0] data_out,
+	input [7:0]      rom_data,
+	output [10:0]    charaddr,
+	input [7:0]      chardata,
 	input            we,
 	output           irq,
 
@@ -83,19 +86,19 @@ module pet2001hw
 // out second port.  This brings total ROM to 16K which is
 // easy to arrange.
 /////////////////////////////////////////////////////////////
-wire [7:0]	rom_data;
+//wire [7:0]	rom_data;
 
-wire [10:0] charaddr;
-wire [7:0] 	chardata;
+//wire [10:0] charaddr;
+//wire [7:0] 	chardata;
 
-pet2001rom rom
-(
-	.q_a(rom_data),
-	.q_b(chardata),
-	.address_a(addr[14:0]), // 1 line added so to support Rom space over 16KB
-	.address_b({5'b1110_1,charaddr}), 
-	.clock(clk)
-);
+//pet2001rom rom
+//(
+//	.q_a(rom_data),
+//	.q_b(chardata),
+//	.address_a(addr[14:0]), // 1 line added so to support Rom space over 16KB
+//	.address_b({5'b1110_1,charaddr}), 
+//	.clock(clk)
+//);
 
 	
 //////////////////////////////////////////////////////////////

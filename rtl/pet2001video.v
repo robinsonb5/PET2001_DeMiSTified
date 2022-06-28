@@ -21,8 +21,9 @@ module pet2001video
 	input          ce_7mn
 );
 
+reg [8:0] hc_adv;
 assign video_on   = (vc < 200);
-assign video_addr = {vc[8:3], 5'b00000}+{vc[8:3], 3'b000}+hc[8:3];
+assign video_addr = {vc[8:3], 5'b00000}+{vc[8:3], 3'b000}+hc_adv[8:3];
 assign charaddr   = {video_gfx, video_data[6:0], vc[2:0]};
 
 reg  [8:0] hc;
@@ -30,9 +31,10 @@ reg  [8:0] vc;
 
 always @(posedge clk) begin
 	if(ce_7mp) begin
-		hc <= hc + 1'd1;
-		if(hc == 447) begin 
-			hc <=0;
+		hc <= hc_adv - 1'd1;
+		hc_adv <= hc_adv + 1'd1;
+		if(hc_adv == 447) begin 
+			hc_adv <=0;
 			vc <= vc + 1'd1;
 			if(vc == 261) vc <= 0;
 		end
