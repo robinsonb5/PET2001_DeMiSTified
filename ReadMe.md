@@ -2,6 +2,19 @@
 
 ### This is the port of [pet2001fpga](https://github.com/skibo/Pet2001_Nexys3).
 
+### Ported to MiST and DeMiSTified platforms by Alastair M. Robinson
+
+## ROM format
+Suitable ROMs can be found in the VICE emulator package and should be concatenated into
+a single file called PET2001.ROM
+The ROM chunks should appear in the following order:
+* BASIC ROM (12k)
+* Edit ROM (2k)
+* Characters ROM (2k)
+* Kernal ROM (4k)
+The ROM file should be 20k in total.
+
+
 ## Installation:
 Copy the *.rbf file at the root of the SD card. Copy roms (*.prg,*.tap) to **PET2001** folder.
 

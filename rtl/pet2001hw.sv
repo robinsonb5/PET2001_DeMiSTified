@@ -112,9 +112,11 @@ wire [10:0] video_addr;
 wire	ram_we  = we && (addr[15:15] == 2'b00); // 1 line added so to support 32KB RAM. PET Kernal sees now the full 32KB.
 wire	vram_we = we && (addr[15:11] == 5'b1000_0);
 
-pet2001ram ram
+//pet2001ram ram
+dpram #(.width(8), .depth(15)) ram
 (
-	.clock(clk),
+	.clock_a(clk),
+	.clock_b(clk),
 
 	.q_a(ram_data),
 	.data_a(data_in),
@@ -127,9 +129,11 @@ pet2001ram ram
 	.wren_b(dma_we)
 );
 
-pet2001vram vidram
+//pet2001vram vidram
+dpram #(.width(8), .depth(11)) vidram
 (
-	.clock(clk),
+	.clock_a(clk),
+	.clock_b(clk),
 
 	.address_a(addr[10:0]),
 	.data_a(data_in),

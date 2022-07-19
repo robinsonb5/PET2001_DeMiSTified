@@ -233,20 +233,20 @@ assign SDRAM_DQML = sd_dqm[0];
 // Refresh logic
 
 // Refresh cycles must be carefully timed so as not to disrupt
-// regular accesses.  For VRAM we synchronise to the incoming
+// regular accesses.  We synchronise to the incoming
 // reference pixel clock and supply a four-cycle window beginning
 // shortly after clkref drops, during which refresh may begin.
 
 reg evencycle;
-reg clkref_d;
+reg [2:0] clkref_d;
 reg [2:0] refreshwindow;
 
 always@(posedge clk) begin
 	evencycle<=!evencycle;
 
-	clkref_d<=clkref;
-	if(clkref_d && !clkref) begin
-			refreshwindow<=3'b001;
+	clkref_d<={clkref_d[1:0],clkref};
+	if(clkref_d[2] && !clkref) begin
+			refreshwindow<=3'b011;
 			evencycle<=1'b1;
 	end
 	if(|refreshwindow)
@@ -254,55 +254,17 @@ always@(posedge clk) begin
 end
 
 wire allowrefresh_vram = |refreshwindow;
-
-
-// Time refreshes for CPU-originated requests so that they
-// immediately follow a ROM request...
-
-reg [3:0] romsync_ctr;
-reg rom_req_d;
-reg allowrefresh_rom;
-
-reg [3:0] tapesync_ctr;
-reg tape_req_d;
-reg allowrefresh_tape;
-
-always @(posedge clk or negedge init_n) begin
-	if(!init_n) begin
-		allowrefresh_rom<=1'b0;
-		allowrefresh_tape<=1'b0;
-	end else begin
-		rom_req_d<=rom_req;
-		if(|romsync_ctr)
-			romsync_ctr<=romsync_ctr-1'b1;
-		else
-			allowrefresh_rom<=1'b0;
-
-		if(rom_req_d!=rom_req) begin
-			allowrefresh_rom<=1'b1;
-			romsync_ctr<=4'hf;
-		end
-
-		tape_req_d<=tape_req;
-		if(|tapesync_ctr)
-			tapesync_ctr<=tapesync_ctr-1'b1;
-		else
-			allowrefresh_tape<=1'b0;
-
-		if(tape_req_d!=tape_req) begin
-			allowrefresh_tape<=1'b1;
-			tapesync_ctr<=4'hf;
-		end
-	end
-end
+wire allowrefresh_rom = |refreshwindow;
+wire allowrefresh_tape = |refreshwindow;
+wire allowrefresh_char = |refreshwindow;
 
 wire need_refresh[4];
 wire force_refresh[4];
 
-localparam bank0_rowbits=(22-`SDRAM_COLBITS); // 22 bits for ROM, 22 bits for char
-localparam bank1_rowbits=(22-`SDRAM_COLBITS); // 22 bits for tape
-localparam bank2_rowbits=(15-`SDRAM_COLBITS);
-localparam bank3_rowbits=(15-`SDRAM_COLBITS);
+localparam bank0_rowbits=(22-`SDRAM_COLBITS); // 22 bits throughout
+localparam bank1_rowbits=(22-`SDRAM_COLBITS); 
+localparam bank2_rowbits=(22-`SDRAM_COLBITS);
+localparam bank3_rowbits=(22-`SDRAM_COLBITS);
 
 reg [bank0_rowbits-1:0] refresh_addr_0;
 reg [bank1_rowbits-1:0] refresh_addr_1;
@@ -347,7 +309,7 @@ refresh_schedule #(.tCK(SDRAM_tCK),.rowbits(bank3_rowbits)) refresh_bank3
 	.clk(clk),
 	.reset_n(init_n),
 	.refreshing(cas2_port==PORT_REFRESH && cas_ba==2'b11 ? 1'b1 : 1'b0),
-	.allow(allowrefresh_vram),
+	.allow(allowrefresh_char),
 	.refresh_req(need_refresh[3]),
 	.refresh_force(force_refresh[3]),
 	.addr(refresh_addr_3)
@@ -386,24 +348,16 @@ reg [23:1] bankaddr[4];
 reg [1:0] bankdqm[4];
 
 
-// Bank 0 priority encoder - ROM / CHAR
+// Devote Bank 0 to ROM
 always @(posedge clk) begin
+	bankwrdata[0]<={rom_din,rom_din};
 	if((!force_refresh[0]) && rom_req ^ port_state[PORT_ROM]) begin
 		bankreq[0]<=1'b1;
 		bankstate[0]<=rom_req;
 		bankport[0]<=PORT_ROM;
 		bankdqm[0]<=rom_we ? { rom_addr[0], ~rom_addr[0] } : 2'b11;
-		bankwrdata[0]<={rom_din,rom_din};
 		bankaddr[0]<={2'b00,rom_addr[21:1]};
 		bankwr[0]<=rom_we;
-	end else if ((!force_refresh[0]) && char_req ^ port_state[PORT_CHAR]) begin
-		bankreq[0]<=1'b1;
-		bankstate[0]<=char_req;
-		bankport[0]<=PORT_CHAR;
-		bankdqm[0]<=char_we ? { char_addr[0], ~char_addr[0] } : 2'b11;
-		bankaddr[0]<={2'b00,char_addr[21:1]};
-		bankwr[0]<=char_we;
-		bankwrdata[0]<={char_din,char_din};
 	end else begin
 		// Manual refresh logic on idle cycles
 		bankreq[0]<=evencycle&need_refresh[0];// &! blockrefresh;
@@ -413,7 +367,6 @@ always @(posedge clk) begin
 		bankaddr[0][`SDRAM_COLBITS:1]<=rom_addr[`SDRAM_COLBITS:1]; // Don't care bits map to another port
 		bankaddr[0][23:`SDRAM_COLBITS+1]<={1'b0,refresh_addr_0};//,{`SDRAM_COLBITS{1'b0}}};
 		bankwr[0]<=1'b0;
-		bankwrdata[0]<={rom_din,rom_din};
 		bankport[0]<=PORT_REFRESH;
 	end
 end
@@ -421,9 +374,9 @@ end
 
 // tape has Bank 1 to itself
 always @(posedge clk) begin
+	bankwrdata[1]<={tape_din,tape_din};
+	bankdqm[1]<=tape_we ? { tape_addr[0], ~tape_addr[0] } : 2'b11;
 	if ((!force_refresh[1]) && tape_req ^ port_state[PORT_TAPE]) begin
-		bankdqm[1]<=tape_we ? { tape_addr[0], ~tape_addr[0] } : 2'b11;
-		bankwrdata[1]<={tape_din,tape_din};
 		bankreq[1]<=1'b1;
 		bankstate[1]<=tape_req;
 		bankport[1]<=PORT_TAPE;
@@ -435,8 +388,6 @@ always @(posedge clk) begin
 		bankstate[1]<=1'b0;
 		bankaddr[1][`SDRAM_COLBITS:1]<=tape_addr[`SDRAM_COLBITS:1]; // Don't care bits map to another port
 		bankaddr[1][23:`SDRAM_COLBITS+1]<={1'b0,refresh_addr_0};//,{`SDRAM_COLBITS{1'b0}}};
-		bankdqm[1]<=tape_we ? { tape_addr[0], ~tape_addr[0] } : 2'b11;
-		bankwrdata[1]<={tape_din,tape_din};
 		bankwr[1]<=1'b0;
 		bankport[1]<=PORT_REFRESH;
 	end
@@ -463,16 +414,16 @@ always @(posedge clk) begin
 	end
 end
 
-// VRAM1 occupies Bank 3
+// Devote Bank 3 to CHAR
 always @(posedge clk) begin
-	bankwrdata[3]<=vram1_din;
-	bankdqm[3]<={!vram1_we,!vram1_we};
-	if((!force_refresh[3]) && vram1_req ^ port_state[PORT_VRAM1]) begin
+	bankwrdata[3]<={char_din,char_din};
+	if ((!force_refresh[3]) && char_req ^ port_state[PORT_CHAR]) begin
 		bankreq[3]<=1'b1;
-		bankstate[3]<=vram1_req;
-		bankport[3]<=PORT_VRAM1;
-		bankaddr[3]<={8'h00,vram1_addr};
-		bankwr[3]<=vram1_we;
+		bankstate[3]<=char_req;
+		bankport[3]<=PORT_CHAR;
+		bankdqm[3]<=char_we ? { char_addr[0], ~char_addr[0] } : 2'b11;
+		bankaddr[3]<={2'b00,char_addr[21:1]};
+		bankwr[3]<=char_we;
 	end else begin
 		// Manual refresh logic on idle cycles
 		bankreq[3]<=need_refresh[3];

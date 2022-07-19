@@ -31,6 +31,12 @@ module PET2001
    output  [5:0] VGA_B,
    output        VGA_HS,
    output        VGA_VS,
+`ifdef DEMISTIFY
+   output        VGA_CLK,
+   output        VGA_WINDOW,
+   output        VGA_PIXEL,
+   output        CORE_CLK,
+`endif
 
    output        LED,
 
@@ -47,6 +53,11 @@ module PET2001
    input         SPI_SS3,
    input         CONF_DATA0,
 
+`ifdef DEMISTIFY
+   input  [15:0] SDRAM_DQ_IN,
+   output [15:0] SDRAM_DQ_OUT,
+   output        SDRAM_DRIVE_DQ,
+`endif
    output [12:0] SDRAM_A,
    inout  [15:0] SDRAM_DQ,
    output        SDRAM_DQML,
@@ -78,13 +89,18 @@ localparam CONF_STR =
 	"PET2001;;",
 	"F,TAPPRG,Load Tape / Program;",
 	"O78,TAP mode,Fast,Normal,Normal+Sound;",
-	"O9A,CPU Speed,Normal,x2,x4,x8;",
-	"O3,Diag,Off,On(needs Reset);",
+	"P1,System;",
+	"P1F,ROM,Load ROM;",
+	"P1O6,Keyboard,Graphics,Business;",
+	"P1O9A,CPU Speed,Normal,Fast,Turbo,Turbo+;",
+	"P1O3,Diag,Off,On(needs Reset);",
 	"O2,Screen Color,White,Green;",
 	"O45,Scanlines,None,25%,50%,75%;",
 	"T0,Reset;",
 	"V,v1.00",`BUILD_DATE
 };
+
+wire keyboardtype = status[6];
 
 ////////////////////   CLOCKS   ///////////////////
 
@@ -96,16 +112,30 @@ pll pll
 	.inclk0(CLOCK_27),
 	.c0(SDRAM_CLK),
 	.c1(clk_sys),
+`ifdef DEMISTIFY_HDMI
+	.c2(VGA_CLK),
+`endif
 	.locked(pll_locked)
 );
 
+`ifdef DEMISTIFY_HDMI
+assign VGA_WINDOW = !HBlank & !VBlank;
+assign CORE_CLK = clk_sys;
+
+reg [3:0] pdiv;
+always @(posedge clk_sys) begin
+	pdiv <= pdiv + 1'b1;
+	VGA_PIXEL <= tv15khz ? &pdiv[1:0] : pdiv[0];
+end
+`endif
+
 reg reset = 1;
 reg sdram_reset_n;
+integer   initRESET = 100;
+reg [3:0] reset_cnt;
 always @(posedge clk_sys) begin
-	integer   initRESET = 10000000;
-	reg [3:0] reset_cnt;
 
-	sdram_reset_n <= initRESET ? 1'b0 : 1'b1;
+	sdram_reset_n <= initRESET || !pll_locked ? 1'b0 : 1'b1;
 	
 	if ((!(status[0] | buttons[1]) && reset_cnt==4'd14) && !initRESET)
 		reset <= 0;
@@ -119,21 +149,28 @@ end
 reg  ce_7mp;
 reg  ce_7mn;
 reg  ce_1m;
-wire [6:0] cpu_rates[4] = '{55, 27, 13, 6};
+//wire [6:0] cpu_rates[4] = {55, 27, 13, 6};
 
+reg  [2:0] div = 0;
+reg  [6:0] cpu_div = 0;
+reg  [6:0] cpu_rate = 55;
+wire [6:0] cpu_rate_sel;
 always @(posedge clk_sys) begin
-	reg  [2:0] div = 0;
-	reg  [6:0] cpu_div = 0;
-	reg  [6:0] cpu_rate = 55;
-
 	div <= div + 1'd1;
 	ce_7mp  <= !div[2] & !div[1:0];
 	ce_7mn  <=  div[2] & !div[1:0];
-	
+
+	case (status[10:9])
+		2'b00 : cpu_rate_sel<=55;
+		2'b01 : cpu_rate_sel<=40;
+		2'b10 : cpu_rate_sel<=24;
+		2'b11 : cpu_rate_sel<=18;
+	endcase
+
 	cpu_div <= cpu_div + 1'd1;
 	if(cpu_div == cpu_rate) begin
 		cpu_div  <= 0;
-		cpu_rate <= (tape_active && !status[8:7]) ? 7'd2 : cpu_rates[status[10:9]];
+		cpu_rate <= (tape_active && !status[8:7]) ? 7'd18 : cpu_rate_sel;
 	end
 	ce_1m <= ~(tape_active & ~ram_ready) && !cpu_div;
 end
@@ -145,46 +182,72 @@ end
 
 wire ram_ready;
 
-wire [15:0] sdram_din={8'hff,ioctl_dout};
-wire [15:0] sdram_dout;
-assign tape_data=sdram_dout[7:0];
-
 wire [15:0] sdram_dq_out;
 wire [15:0] sdram_dq_in;
 wire sdram_drive_dq;
 
+`ifdef YOSYS
+assign SDRAM_DQ_OUT = sdram_dq_out;
+assign sdram_dq_in = SDRAM_DQ_IN;
+assign SDRAM_DRIVE_DQ = sdram_drive_dq;
+`else
 assign SDRAM_DQ = sdram_drive_dq ? sdram_dq_out : {16{1'bz}};
 assign sdram_dq_in = SDRAM_DQ;
+`endif
 
 wire [15:0] addr;
-wire [15:0] addr_d;
+reg [15:0] addr_d;
 wire [15:0] rom_dout;
 wire [7:0] rom_byte = addr[0] ? rom_dout[7:0] : rom_dout[15:8];
 reg rom_req;
 wire rom_ack;
 reg rom_write;
+reg char_write;
 
 wire [15:0] charaddr;
 assign charaddr[15:11] = 5'b1110_1; // FIXME - too many bits?
-wire [15:0] charaddr_d;
+reg [15:0] charaddr_d;
 wire [15:0] char_dout;
 wire [7:0] char_byte = charaddr[0] ? char_dout[7:0] : char_dout[15:8];
 reg char_req;
 wire char_ack;
 
+wire [24:0] tape_addr;
+wire [15:0] tape_dout;
+wire [7:0] tape_data = tape_addr[0] ? tape_dout[7:0] : tape_dout[15:8];
+reg tape_wr;
+reg tape_rd_d;
+reg tape_req;
+wire tape_ack;
+
 always @(posedge clk_sys) begin
 	if((addr!=addr_d && !rom_download) || (rom_download && ioctl_wr))
-		rom_req<=~rom_req;
+		rom_req<=~rom_ack;
 
-	if((charaddr!=charaddr_d && !rom_download )) // || (rom_download && ioctl_wr))
-		char_req<=~char_req;
+	if((charaddr!=charaddr_d && !rom_download ) || (rom_download && ioctl_wr))
+		char_req<=~char_ack;
 
-	if (rom_req == rom_ack && char_req == char_ack)
+	if (rom_req == rom_ack)
 		rom_write<=1'b0;
-		
-	if (rom_download && ioctl_wr)
+
+	if (char_req == char_ack)
+		char_write<=1'b0;
+
+	if (rom_download && ioctl_wr) begin
 		rom_write<=1'b1;
-		
+		char_write<=1'b1;
+	end
+	
+	if (tape_req == tape_ack)
+		tape_wr<=1'b0;
+
+	if (tap_download && ioctl_wr)
+		tape_wr<=1'b1;
+
+	if ((!tap_download && tape_rd && ~tape_rd_d) || (tap_download && ioctl_wr))
+		tape_req <= ~tape_ack;
+	tape_rd_d <= tape_rd;
+
 	addr_d <= addr;
 	charaddr_d <= charaddr;
 end
@@ -206,11 +269,11 @@ sdram_amr ram
 	// cpu/chipset interface
 	.init_n(sdram_reset_n),
 	.clk(clk_sys),
-	.clkref(ce_7mp),
+	.clkref(ce_1m),
 	.sync_en(1'b1),
 	.ready(ram_ready),
 
-	// ROM and Char are in tha same bank since they both access the same ROM.
+	// ROM and Char are in the same bank since they both access the same ROM.
 	
 	.rom_addr(rom_download ? 16'h3000+ioctl_addr[21:0] : addr[14:0]),
 	.rom_dout(rom_dout),
@@ -219,15 +282,19 @@ sdram_amr ram
 	.rom_ack (rom_ack),
 	.rom_we (rom_write),
 
-	.char_addr(charaddr[14:0]),
+	.char_addr(rom_download ? 16'h3000+ioctl_addr[21:0] : charaddr[14:0]),
 	.char_dout(char_dout),
 	.char_din (ioctl_dout),
 	.char_req (char_req),
 	.char_ack (char_ack),
-	.char_we (1'b0),
+	.char_we (char_write),
 
 	.tape_addr(tap_download ? ioctl_addr : tape_addr),
-	.tape_we( ioctl_download && ioctl_wr && (ioctl_index == 1))
+	.tape_dout(tape_dout),
+	.tape_din(ioctl_dout),
+	.tape_req(tape_req),
+	.tape_ack(tape_ack),
+	.tape_we(tape_wr)
 );
 
 always @(posedge clk_sys) begin
@@ -270,8 +337,8 @@ user_io #(.STRLEN($size(CONF_STR)>>3)) user_io (
 	.SPI_MOSI       ( SPI_DI         ),
 
 	.scandoubler_disable ( tv15khz   ),
-	.ypbpr          ( ),
-	.no_csync       ( ),
+	.no_csync       ( nocsync ),
+	.ypbpr          ( ypbpr ),
 	.buttons        ( buttons        ),
 
 	.joystick_0     ( js0            ),
@@ -284,11 +351,9 @@ user_io #(.STRLEN($size(CONF_STR)>>3)) user_io (
 	.key_strobe     (ps2_key_stb)
 );
 
-wire rom_download = ioctl_download && (ioctl_index == 8'h00);
-wire prg_download = ioctl_download && (ioctl_index == 8'h01);
-wire tap_download = ioctl_download && (ioctl_index == 8'h41);
-
-wire c16_wait = rom_download | prg_download;
+wire rom_download = ioctl_download && (ioctl_index == 8'h00 || ioctl_index == 8'h02);
+wire prg_download = ioctl_download && (ioctl_index == 8'h41);
+wire tap_download = ioctl_download && (ioctl_index == 8'h01);
 
 data_io data_io (
 	.clk_sys        ( clk_sys ),
@@ -400,39 +465,39 @@ reg  [15:0] dl_addr;
 reg   [7:0] dl_data;
 reg         dl_wr;
 
+reg        old_prg_download = 0;
+reg  [3:0] state = 0;
+reg [15:0] loadaddr;
 always @(posedge clk_sys) begin
-	reg        old_download = 0;
-	reg  [3:0] state = 0;
-	reg [15:0] addr;
 
 	dl_wr <= 0;
-	old_download <= ioctl_download;
+	old_prg_download <= prg_download;
 
-	if(ioctl_download && (ioctl_index == 8'h41)) begin
+	if(prg_download) begin
 		state <= 0;
 		if(ioctl_wr) begin  
-			     if(ioctl_addr == 0) addr[7:0]  <= ioctl_dout;
-			else if(ioctl_addr == 1) addr[15:8] <= ioctl_dout;
+			     if(ioctl_addr == 0) loadaddr[7:0]  <= ioctl_dout;
+			else if(ioctl_addr == 1) loadaddr[15:8] <= ioctl_dout;
 			else begin
-				if(addr<'h8000) begin
-					dl_addr <= addr;
+				if(loadaddr<'h8000) begin
+					dl_addr <= loadaddr;
 					dl_data <= ioctl_dout;
 					dl_wr   <= 1;
-					addr    <= addr + 1'd1;
+					loadaddr    <= loadaddr + 1'd1;
 				end
 			end
 		end
 	end
 
-	if(old_download && ~ioctl_download && (ioctl_index == 8'h41)) state <= 1;
+	if(old_prg_download && ~prg_download) state <= 1;
 	if(state) state <= state + 1'd1;
 
 	case(state)
-		 1: begin dl_addr <= 16'h2a; dl_data <= addr[7:0];  dl_wr <= 1; end
-		 3: begin dl_addr <= 16'h2b; dl_data <= addr[15:8]; dl_wr <= 1; end
+		 1: begin dl_addr <= 16'h2a; dl_data <= loadaddr[7:0];  dl_wr <= 1; end
+		 3: begin dl_addr <= 16'h2b; dl_data <= loadaddr[15:8]; dl_wr <= 1; end
 	endcase
 	
-	if(ioctl_download && !ioctl_index) begin
+	if(rom_download) begin // Initial ROM download
 		state <= 0;
 		if(ioctl_wr) begin
 			if(ioctl_addr>='h0400 && ioctl_addr<'h8000) begin
@@ -449,7 +514,10 @@ end
 // Video
 ////////////////////////////////////////////////////////////////////	
 
-mist_video #(.COLOR_DEPTH(2), .OSD_COLOR(3'd5), .SD_HCNT_WIDTH(10), .OSD_AUTO_CE(0)) mist_video (
+wire nocsync;
+wire ypbpr;
+
+mist_video #(.COLOR_DEPTH(2), .OSD_COLOR(3'd5), .SD_HCNT_WIDTH(10), .OSD_AUTO_CE(1)) mist_video (
 	.clk_sys     ( clk_sys    ),
 
 	// OSD SPI interface
@@ -466,9 +534,14 @@ mist_video #(.COLOR_DEPTH(2), .OSD_COLOR(3'd5), .SD_HCNT_WIDTH(10), .OSD_AUTO_CE
 	// 0 = HVSync 31KHz, 1 = CSync 15KHz
 	.scandoubler_disable ( tv15khz ),
 	// disable csync without scandoubler
-	.no_csync    ( 1'b0 ),
+`ifdef DEMISTIFY_HDMI
+	.no_csync    ( 1'b1 ),
+	.ypbpr       (1'b0),
+`else
+	.no_csync    ( nocsync ),
 	// YPbPr always uses composite sync
-	.ypbpr       ( 1'b0 ),
+	.ypbpr       ( ypbpr ),
+`endif
 	// Rotate OSD [0] - rotate [1] - left or right
 	.rotate      ( 2'b00      ),
 	// composite-like blending
@@ -495,54 +568,89 @@ mist_video #(.COLOR_DEPTH(2), .OSD_COLOR(3'd5), .SD_HCNT_WIDTH(10), .OSD_AUTO_CE
 ////////////////////////////////////////////////////////////////////		
 
 wire [1:0] audio = {audioDat ^ tape_write, tape_audio & tape_active & (status[8:7] == 2)};
-assign AUDIO_L = {audio, 12'd0};
-assign AUDIO_R = AUDIO_L;
+
+wire [7:0] aud_l = {2'b10,audio,4'd0};
+wire [7:0] aud_r = aud_l;
+
 
 wire        tape_audio;
 wire        tape_rd;
-wire [24:0] tape_addr;
-wire  [7:0] tape_data;
 wire        tape_pause = 0;
 wire        tape_active;
 wire        tape_write;
 
 tape tape(
 	.clk(clk_sys),
-	.reset(reset),
-	.ce_1m(ce_1m),
-	.ioctl_download(ioctl_download && (ioctl_index==1)),
-	.tape_pause(tape_pause),
-	.tape_audio(tape_audio),
-	.tape_active(tape_active),
-	.tape_rd(tape_rd),
-	.tape_addr(tape_addr),
-	.tape_data(tape_data)
+	.reset,
+	.ce_1m,
+	.ioctl_download(tap_download),
+	.tape_pause,
+	.tape_audio,
+	.tape_active,
+	.tape_rd,
+	.tape_addr,
+	.tape_data
 );
 
 reg [18:0] act_cnt;
 wire       tape_led = act_cnt[18] ? act_cnt[17:10] <= act_cnt[7:0] : act_cnt[17:10] > act_cnt[7:0];
-always @(posedge clk_sys) if((|status[8:7] ? ce_1m : ce_7mp) && (tape_active || act_cnt[18] || act_cnt[17:0])) act_cnt <= act_cnt + 1'd1; 
 
+always @(posedge clk_sys) begin
+	if( (|status[8:7] ? ce_1m : ce_7mp) && (tape_active || act_cnt[18] || act_cnt[17:0]))
+		act_cnt <= act_cnt + 1'd1; 
+end
 
-// FIXME - add sigma_delta here...
+dac ldac (
+	.clk_i(clk_sys),
+	.res_n_i(!reset),
+	.dac_i(aud_l),
+	.dac_o(AUDIO_L)
+);
+
+dac rdac (
+	.clk_i(clk_sys),
+	.res_n_i(!reset),
+	.dac_i(aud_r),
+	.dac_o(AUDIO_R)
+);
+
 
 //////////////////////////////////////////////////////////////////////
 // PS/2 to PET keyboard interface
 //////////////////////////////////////////////////////////////////////
 wire [7:0] 	keyin;
-wire [3:0] 	keyrow;	 
+wire [7:0] 	keyin_gfx;
+wire [7:0] 	keyin_business;
+wire [3:0] 	keyrow;
+wire        shift_lock_gfx;
+wire        shift_lock_business;
 wire        shift_lock;
+
+assign keyin=keyboardtype ? keyin_business : keyin_gfx;
+assign shift_lock=keyboardtype ? shift_lock_business : shift_lock_gfx;
 
 keyboard keyboard(
 	.clk(clk_sys),
 	.reset(reset),
 	.ps2_key({ps2_key_stb,ps2_key_pressed,ps2_key_ext,ps2_key}),
 	.keyrow(keyrow),
-	.keyin(keyin),
-	.shift_lock(shift_lock),
+	.keyin(keyin_gfx),
+	.shift_lock(shift_lock_gfx),
 	.Fn(),
 	.mod()
 );
+
+businesskeyboard businesskeyboard(
+	.clk(clk_sys),
+	.reset(reset),
+	.ps2_key({ps2_key_stb,ps2_key_pressed,ps2_key_ext,ps2_key}),
+	.keyrow(keyrow),
+	.keyin(keyin_business),
+	.shift_lock(shift_lock_business),
+	.Fn(),
+	.mod()
+);
+
 
 endmodule
 

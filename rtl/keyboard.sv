@@ -15,8 +15,8 @@ module keyboard
 );
 
 wire pressed    = ps2_key[9];
-//wire extended   = ps2_key[8];
-wire [7:0] code = ps2_key[7:0];
+wire extended   = ps2_key[8];
+wire [7:0] code = ps2_key[8:0]; // Extended, code
 
 reg  [7:0] keys[10];
 wire       release_btn = ~pressed;
@@ -25,9 +25,9 @@ assign     keyin = keys[keyrow];
 
 wire       shift = mod[0];
 
+reg old_reset = 0;
+reg old_stb;
 always @(posedge clk) begin
-	reg old_reset = 0;
-	reg old_stb;
 
 	old_reset <= reset;
 
@@ -82,37 +82,37 @@ always @(posedge clk) begin
 						if(~release_btn) keys[8][5] <= 0;
 							else keys[8][5] <= ~shift_lock;
 					end
-			'h71: begin
+			'h171: begin
 						keys[1][7] <= release_btn; // DEL
 						if(~release_btn) keys[8][5] <= 1;
 							else keys[8][5] <= ~shift_lock;
 					end
-			'h70: begin
+			'h170: begin
 						keys[1][7] <= release_btn; // INSERT
 						if(~release_btn) keys[8][5] <= 0;
 							else keys[8][5] <= ~shift_lock;
 					end
-			'h6C: begin
+			'h16C: begin
 						keys[0][6] <= release_btn; // HOME
 						if(~release_btn) keys[8][5] <= 1;
 							else keys[8][5] <= ~shift_lock;
 					end
-			'h72: begin
+			'h172: begin
 						keys[1][6] <= release_btn; // DOWN
 						if(~release_btn) keys[8][5] <= 1;
 							else keys[8][5] <= ~shift_lock;
 					end
-			'h75: begin
+			'h175: begin
 						keys[1][6] <= release_btn; // UP
 						if(~release_btn) keys[8][5] <= 0;
 							else keys[8][5] <= ~shift_lock;
 					end
-			'h74: begin
+			'h174: begin
 						keys[0][7] <= release_btn; // RIGHT
 						if(~release_btn) keys[8][5] <= 1;
 							else keys[8][5] <= ~shift_lock;
 					end
-			'h6B: begin
+			'h16B: begin
 						keys[0][7] <= release_btn; // LEFT
 						if(~release_btn) keys[8][5] <= 0;
 							else keys[8][5] <= ~shift_lock;
@@ -245,6 +245,21 @@ always @(posedge clk) begin
 					keys[9][7] <= release_btn |  shift;  // =
 					keys[7][7] <= release_btn | ~shift;  // +
 				end
+
+			// Numeric keypad
+			'h70: keys[8][6] <= release_btn; // 0
+			'h71: keys[9][6] <= release_btn; // .
+			'h69: keys[6][6] <= release_btn; // 1
+			'h72: keys[7][6] <= release_btn; // 2
+			'h7a: keys[6][7] <= release_btn; // 3
+			'h6b: keys[4][6] <= release_btn; // 4
+			'h73: keys[5][6] <= release_btn; // 5
+			'h74: keys[4][7] <= release_btn; // 6
+			'h6c: keys[2][6] <= release_btn; // 7
+			'h75: keys[3][6] <= release_btn; // 8
+			'h7d: keys[2][7] <= release_btn; // 9
+			'h79: keys[7][7] <= release_btn; // +
+			'h7c: keys[5][7] <= release_btn; // *
 
 			default:;
 		endcase
