@@ -162,15 +162,15 @@ always @(posedge clk_sys) begin
 
 	case (status[10:9])
 		2'b00 : cpu_rate_sel<=55;
-		2'b01 : cpu_rate_sel<=40;
-		2'b10 : cpu_rate_sel<=24;
-		2'b11 : cpu_rate_sel<=18;
+		2'b01 : cpu_rate_sel<=45;
+		2'b10 : cpu_rate_sel<=34;
+		2'b11 : cpu_rate_sel<=24;
 	endcase
 
 	cpu_div <= cpu_div + 1'd1;
 	if(cpu_div == cpu_rate) begin
 		cpu_div  <= 0;
-		cpu_rate <= (tape_active && !status[8:7]) ? 7'd18 : cpu_rate_sel;
+		cpu_rate <= (tape_active && !status[8:7]) ? 7'd24 : cpu_rate_sel;
 	end
 	ce_1m <= ~(tape_active & ~ram_ready) && !cpu_div;
 end
@@ -517,6 +517,16 @@ end
 wire nocsync;
 wire ypbpr;
 
+reg [1:0] red;
+reg [1:0] green;
+reg [1:0] blue;
+
+always @(posedge clk_sys) begin
+	red <= {2{~status[2] & pix}};
+	green <= {2{pix}};
+	blue <= {2{~status[2] & pix}};
+end
+
 mist_video #(.COLOR_DEPTH(2), .OSD_COLOR(3'd5), .SD_HCNT_WIDTH(10), .OSD_AUTO_CE(1)) mist_video (
 	.clk_sys     ( clk_sys    ),
 
@@ -548,9 +558,9 @@ mist_video #(.COLOR_DEPTH(2), .OSD_COLOR(3'd5), .SD_HCNT_WIDTH(10), .OSD_AUTO_CE
 	.blend       ( 1'b0       ),
 
 	// video in
-	.R           ({2{~status[2] & pix}}),
-	.G           ({2{pix}}),
-	.B           ({2{~status[2] & pix}}),
+	.R           (red),
+	.G           (green),
+	.B           (blue),
 	.HSync       ( HSync      ),
 	.VSync       ( VSync      ),
 

@@ -1,0 +1,2 @@
+set_global_assignment -name SYNTH_RESOURCE_AWARE_INFERENCE_FOR_BLOCK_RAM OFF
+

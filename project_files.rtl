@@ -1,0 +1,26 @@
+# files inherited from the guest core:
+rtl/pet2001.qip
+mist/PET2001.sv
+mist/mist-modules/user_io.v
+mist/mist-modules/data_io.v
+mist/mist-modules/mist_video.v
+mist/scandoubler.v
+mist/osd.v
+mist/mist-modules/arcade_inputs.v
+mist/mist-modules/rgb2ypbpr.v
+mist/mist-modules/cofi.sv
+mist/mist-modules/dac.vhd
+
+# VHDL definitions for the core, including
+# a component declaration for the guest core
+demistify_config_pkg.vhd
+
+firmware/controller_rom1.rom
+firmware/controller_rom2.rom
+
+# The controller module
+DeMiSTify/controller/controller.qip
+
+# Pre-flow script
+rtl/build_id_verilog.tcl
+

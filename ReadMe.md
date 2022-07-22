@@ -14,14 +14,16 @@ The ROM chunks should appear in the following order:
 * Kernal ROM (4k)
 The ROM file should be 20k in total.
 
+Note that the Edit ROM is specific to the keyboard type of the machine - so if the keyboard does weird things
+try toggling the keyboard between "Graphics" and "Business" in the System menu.
 
 ## Installation:
-Copy the *.rbf file at the root of the SD card. Copy roms (*.prg,*.tap) to **PET2001** folder.
+Copy the *.rbf and the PET2001.ROM file to the root of the SD card.
+Copy roms (*.prg,*.tap) to a directory of your choice.
 
 ### Notes:
 * PRG apps are directly injected into RAM. Load command is not required.
-* TAP files are loaded through virtual tape input. press **F1** to issue LOAD command, and then choose TAP file in OSD.
+* TAP files are loaded through virtual tape input. Type "LOAD" and press Return, so the PET displays the message "SEARCHING"
+then choose TAP file in OSD.
 * **F12** opens OSD.
 
-## Download precompiled binaries
-Go to [releases](https://github.com/MiSTer-devel/PET2001_MiSTer/tree/master/releases) folder.

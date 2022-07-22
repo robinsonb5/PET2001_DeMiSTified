@@ -6,6 +6,7 @@ set sys_clk   "${topmodule}pll|altpll_component|auto_generated|pll1|clk[1]"
 derive_clock_uncertainty
 
 set_clock_groups -asynchronous -group [get_clocks $hostclk] -group [get_clocks $sys_clk]
+set_clock_groups -asynchronous -group [get_clocks $supportclk] -group [get_clocks $sys_clk]
 set_clock_groups -asynchronous -group [get_clocks spiclk] -group [get_clocks $sys_clk]
 
 # SDRAM delays
