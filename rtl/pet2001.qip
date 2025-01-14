@@ -1,4 +1,4 @@
-set_global_assignment -name QIP_FILE [file join $::quartus(qip_path)/t65/t65.qip]
+set_global_assignment -name QIP_FILE [file join $::quartus(qip_path)/T65/T65.qip]
 set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) dpram.v]
 set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) via6522.v]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) ddram.sv]
