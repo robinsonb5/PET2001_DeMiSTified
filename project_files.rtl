@@ -1,15 +1,7 @@
 # files inherited from the guest core:
 rtl/pet2001.qip
 mist/PET2001.sv
-mist/mist-modules/user_io.v
-mist/mist-modules/data_io.v
-mist/mist-modules/mist_video.v
-mist/scandoubler.v
-mist/osd.v
-mist/mist-modules/arcade_inputs.v
-mist/mist-modules/rgb2ypbpr.v
-mist/mist-modules/cofi.sv
-mist/mist-modules/dac.vhd
+mist/mist-modules/mist.qip
 
 # VHDL definitions for the core, including
 # a component declaration for the guest core

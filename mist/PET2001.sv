@@ -34,7 +34,12 @@ module PET2001 (
 	output [VGA_BITS-1:0] VGA_B,
 	output        VGA_HS,
 	output        VGA_VS,
-
+`ifdef DEMISTIFY
+	output        VGA_CLK,
+	output        VGA_WINDOW,
+	output        VGA_PIXEL,
+	output        CORE_CLK,
+`endif
 `ifdef USE_HDMI
 	output        HDMI_RST,
 	output  [7:0] HDMI_R,
@@ -65,8 +70,13 @@ module PET2001 (
 	input         SPI_SS4,
 `endif
 
-	output [12:0] SDRAM_A,
+`ifdef DEMISTIFY
+	input  [15:0] SDRAM_DQ_IN,
+	output [15:0] SDRAM_DQ_OUT,
+	output        SDRAM_DRIVE_DQ,
+`endif
 	inout  [15:0] SDRAM_DQ,
+	output [12:0] SDRAM_A,
 	output        SDRAM_DQML,
 	output        SDRAM_DQMH,
 	output        SDRAM_nWE,
