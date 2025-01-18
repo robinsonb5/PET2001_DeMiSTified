@@ -15,8 +15,7 @@ module keyboard
 );
 
 wire pressed    = ps2_key[9];
-wire extended   = ps2_key[8];
-wire [7:0] code = ps2_key[8:0]; // Extended, code
+wire [8:0] code = ps2_key[8:0]; // Extended, code
 
 reg  [7:0] keys[10];
 wire       release_btn = ~pressed;
@@ -66,7 +65,7 @@ always @(posedge clk) begin
 			8'h78: Fn[11]<= ~release_btn; // F11
 		endcase
 
-		case(code)
+		casez(code)
 			'h76: begin
 						keys[9][4] <= release_btn; // ESC -> STOP
 						if(~release_btn) keys[8][5] <= 1;
@@ -126,7 +125,7 @@ always @(posedge clk) begin
 			'h11: keys[8][5] <= release_btn ^ shift_lock;  // ALT  -> R SHIFT
 			'h14: keys[8][0] <= release_btn;  // CTRL  -> L SHIFT
 			'h1F: keys[9][0] <= release_btn;  // L GUI -> REV ON/OFF
-			'h5A: keys[6][5] <= release_btn;  // RETURN
+			'h?5A: keys[6][5] <= release_btn; // RETURN
 			'h66: keys[1][7] <= release_btn;  // BKSP  -> DEL
 
 			'h1C: keys[4][0] <= release_btn;  // a
