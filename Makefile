@@ -7,10 +7,12 @@ BOARD=
 ROMSIZE1=8192
 ROMSIZE2=4096
 
+BOARDS=chameleon64 chameleon64v2 de10lite
+
 # Prevent MiST / MiSTer targets being built if the user supplied the BOARDS variable when invoking make.
 TARGETS_NOMIST=$(DEMISTIFYPATH)/site.template $(DEMISTIFYPATH)/site.mk $(SUBMODULES) firmware init compile tns
 ifndef BOARDS
-	TARGETS = $(TARGETS_NOMIST) mist mister
+	TARGETS = $(TARGETS_NOMIST) mist sidi sidi128 mister
 else
 	TARGETS = $(TARGETS_NOMIST)
 endif
@@ -69,6 +71,23 @@ mist:
 	@$(QUARTUS_MIST)/quartus_sh >mist/compile.log --flow compile mist/$(PROJECT)_mist.qpf \
 		&& echo "\033[32mSuccess\033[0m" || grep Error mist/compile.log
 	@grep -r Design-wide\ TNS mist/output_files/*.rpt
+
+
+.PHONY: sidi
+sidi:
+	@echo -n "Compiling $(PROJECT) for SiDi... "
+	@$(QUARTUS_CYCLONEIV)/quartus_sh >sidi/compile.log --flow compile sidi/$(PROJECT)_sidi.qpf \
+		&& echo "\033[32mSuccess\033[0m" || grep Error sidi/compile.log
+	@grep -r Design-wide\ TNS sidi/output_files/*.rpt
+
+
+.PHONY: sidi128
+sidi128:
+	@echo -n "Compiling $(PROJECT) for SiDi128... "
+	@$(QUARTUS_CYCLONE10LP)/quartus_sh >sidi128/compile.log --flow compile sidi128/$(PROJECT)_SiDi128.qpf \
+		&& echo "\033[32mSuccess\033[0m" || grep Error sidi128/compile.log
+	@grep -r Design-wide\ TNS sidi128/output_files/*.rpt
+
 
 .PHONY: mister
 mister:

@@ -70,11 +70,6 @@ module PET2001 (
 	input         SPI_SS4,
 `endif
 
-`ifdef DEMISTIFY
-	input  [15:0] SDRAM_DQ_IN,
-	output [15:0] SDRAM_DQ_OUT,
-	output        SDRAM_DRIVE_DQ,
-`endif
 	inout  [15:0] SDRAM_DQ,
 	output [12:0] SDRAM_A,
 	output        SDRAM_DQML,
